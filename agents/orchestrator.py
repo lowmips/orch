@@ -120,7 +120,7 @@ class Orchestrator:
 
         elif msg_type == "n":  # reconnect
             agent_id = msg["a"]
-            self.agents[agent_id] = {"port": msg.get("o", 0)}
+            self.agents[agent_id] = {"port": msg.get("p", 0), "resources": msg.get("r", {})}
             for queued_msg in msg["q"]:
                 await self.process_message(queued_msg, writer)
 
@@ -148,7 +148,8 @@ class Orchestrator:
                 "data": {
                     "type": "u",
                     "conversation_id": convo_id,
-                    "history": {"old": history, "latest": latest}
+                    "history": {"old": history, "latest": latest},
+                    "resources": {"cpu": 4, "memory": 8192, "os": "linux"}  # Example local resources
                 }
             })
         }
@@ -177,16 +178,26 @@ class Orchestrator:
 
     async def handle_action(self, action, convo_id):
         task = action.get("t")
+        requirements = action.get("requirements", {})
         self.task_counter += 1
         task_id = f"T{self.task_counter}"
-        port = self.get_agent_port(action.get("agent", "default"))
+        port = await self.get_agent_port(requirements)
         self.tasks[task_id] = {"t": task, "s": "r", "port": port}
         self.conversations[convo_id]["tasks"][task_id] = self.tasks[task_id]
         await self.send_task(task_id, task, action.get("d", ""), port)
         asyncio.create_task(self.poll_task(task_id, port))
 
-    def get_agent_port(self, agent_type):
-        return 5006 if agent_type == "ui_local" else 5000  # Default to Directory Agent if unknown
+    async def get_agent_port(self, requirements):
+        reader, writer = await asyncio.open_connection('localhost', 5000)
+        msg = {"a": "q", "r": requirements}
+        writer.write(json.dumps(msg).encode())
+        await writer.drain()
+        data = await reader.read(1024)
+        response = json.loads(data.decode())
+        agents = response.get("g", [])
+        writer.close()
+        await writer.wait_closed()
+        return agents[0]["p"] if agents else 5006  # Default to Local UI Agent if no match
 
     async def send_task(self, task_id, task, data, port):
         reader, writer = await asyncio.open_connection('localhost', port)

@@ -3,123 +3,78 @@ Date: March 08, 2025
 Author: [Your Name] with assistance from Grok 3 (xAI)
 
 ### Overview
-This document outlines a system for automating tasks using AI-driven components, leveraging xAI's Grok models. Components run independently, communicating via JSON over TCP sockets. The Orchestrator processes messages asynchronously, polls agents with timeouts/retries, and tracks states with crash recovery. Agents use Grok API concisely per `prompts/agent_grok_prompt.txt`. UI Agents (Local GUI, Remote Web) support conversations with job tracking, cancellation, and persistence.
+This system automates tasks using AI-driven agents, leveraging xAI's Grok models. Agents are general-purpose, capable of any task, differentiated by system resources (CPU, memory, disk) and OS type. The Orchestrator, a special agent, processes user requests via JSON over TCP sockets, delegates tasks it can’t handle, and tracks states with crash recovery. Agents use the Grok API concisely. The UI (Local GUI) supports conversations with job tracking, cancellation, and persistence.
 
 ### Terminology
-- **Executors**: Task-specific (planned).
-- **Scouts**: Info-gathering (planned).
-- **Agents**: Service providers (e.g., UI Agents, Email Agent, planned).
-- **Orchestrator**: Central hub.
-- **Directory Agent**: Registry (planned).
+- **Agents**: General-purpose entities, vary by resources and OS.
+- **Orchestrator**: Special agent for user interaction and task delegation.
+- **Directory Agent**: Registry of agent resources and OS.
 
 ### Component Design Principles
-- **Program-Based**: Independent components.
+- **Program-Based**: Independent agents.
 - **Asynchronous**: Orchestrator sends tasks, polls without waiting.
 - **State Awareness**: Tracks states with timeouts/retries, persists for crash recovery.
-- **Conversation Management**: UI Agents handle conversations, tie jobs to them, allow cancellation, persist on crash.
-- **AI Efficiency**: Agents use Grok API concisely, no banter, per `prompts/agent_grok_prompt.txt`.
+- **Conversation Management**: UI supports conversations, ties jobs to them, allows cancellation, persists on crash.
+- **AI Efficiency**: Agents use Grok API concisely, no banter.
 - **AI Integration**: Grok API primary.
 
 ### Communication with Orchestrator
-- **Interface**: Orchestrator on localhost:5005; UI Agents (Local GUI/Remote Web, planned) for interaction.
-- **Mechanism**: Async JSON over TCP sockets, polled with 2s timeout, 3 retries, 10s total.
-- **Context**: Sending agent includes System Prompt (`prompts/orchestrator_system_prompt.txt`) + history.
-- **System Prompt**: In `prompts/orchestrator_system_prompt.txt`, real components only.
+- **Interface**: Orchestrator on localhost:5005; Local UI Agent (GUI) on localhost:5006.
+- **Mechanism**: Async JSON over TCP sockets, polled per `config/orchestrator_config.json`.
+- **Context**: Sending agent includes system prompt + history.
+- **System Prompt**: In `prompts/orchestrator_system_prompt.txt`.
 - **Protocol**: JSON over TCP sockets:
   - To Orchestrator (localhost:5005):
-    - UI Agent: `{ "type": "user_request", "request": "<text>", "conversation_id": "<id>", "history": ["<msg1>"] }` → `{ "type": "response", "response": "<text>", ... }` to UI port (e.g., 5006).
+    - UI: `{ "type": "user_request", "request": "<text>", "conversation_id": "<id>", "history": ["<msg1>"] }` → `{ "type": "response", "response": "<text>" }` to 5006.
     - Cancel: `{ "type": "cancel", "conversation_id": "<id>" }`.
     - Resume: `{ "type": "resume", "conversation_id": "<id>", "history": ["<msg1>"], "tasks": ["<task_id1>"] }`.
-    - Others: `{ "type": "<type>", "data": "<data>" }` (e.g., `{ "type": "status_update", "task_id": "T1", "state": "completed", "result": "Done"}`).
     - Reconnect: `{ "type": "reconnect", "agent_id": "<id>", "queue": [{"type": "...", ...}] }`.
-  - Orchestrator to Directory Agent: `{ "action": "query", "service": "<type>" }` → `{ "agents": [...] }`.
-  - Orchestrator to Agents/Executors/Scouts:
-    - Task: `{ "task": "<task>", "task_id": "<id>", "data": "<data>", "persist": <true/false> }`.
-    - Poll: `{ "type": "status_poll", "task_id": "<id>" }` → `{ "type": "status_update", "task_id": "<id>", "state": "<state>", "result": "<output>" }`.
+  - Orchestrator to Directory Agent: `{ "action": "query", "requirements": {"cpu": <int>, "memory": <int>, "os": "<type>"} }` → `{ "agents": [{"id": "<id>", "port": <port>, "resources": {...}}] }`.
+  - Orchestrator to Agents: `{ "task": "<task>", "task_id": "<id>", "data": "<data>", "persist": <true/false> }` → `{ "type": "status_update", "task_id": "<id>", "state": "<state>", "result": "<output>" }`.
 
 ### Agent-to-Grok API Communication
 - **Mechanism**: Concise JSON, no banter, per `prompts/agent_grok_prompt.txt`.
-- **Example**: `{ "task": "parse", "input": "Send email" }` → `{ "result": "Parsed", "action": "send_email" }`.
 
 ### Crash Recovery
-- **Conversation Persistence**: UI Agents save conversations (history, tasks) to file, reload on restart with "resume" message.
-- **Orchestrator Persistence**: Saves conversation-job mappings to `conversations/<id>/state.json`, reloads on restart from dir tree.
-- **Agent Behavior**: Detect Orchestrator crash via socket errors, queue messages, retry connecting (e.g., every 5s), report data on reconnect.
-- **Job Handling**: Persistent jobs (e.g., new agent) survive crashes; restartable jobs (e.g., monitoring) restart; agents report state/data post-crash.
+- **Conversation Persistence**: UI saves conversations to file, reloads with "resume".
+- **Orchestrator Persistence**: Saves conversation-job mappings to `conversations/<id>/state.json`, reloads from dir tree.
+- **Agent Behavior**: Queues messages on Orchestrator crash, retries connecting, reports on reconnect.
 
-### Components (Planned, Partially Implemented)
-#### 1. Executors
-##### Command Executor
-- **Purpose**: Runs commands.
-- **Protocol**: `{ "task": "run", "task_id": "<id>", "data": "<cmd>" }` on localhost:5001.
+### Components
+#### Agents
+- **Purpose**: General-purpose task execution, vary by resources and OS.
+- **Protocol**: `{ "task": "<task>", "task_id": "<id>", "data": "<data>", "persist": <true/false> }` on registered port.
 
-#### 2. Scouts
-##### Web Scout
-- **Purpose**: Searches web.
-- **Protocol**: `{ "task": "search", "task_id": "<id>", "data": "<query>" }` on localhost:5003.
+#### Local User Interface Agent (Local UI Agent)
+- **Purpose**: User conversation, runs locally.
+- **Interface**: Desktop GUI, Grok-like chat, multi-conversation with cancellation.
+- **Protocol**: As above, receives on localhost:5006.
+- **Crash**: Saves conversations, reloads on restart.
 
-#### 3. Agents
-##### MySQL Agent
-- **Purpose**: Manages MySQL.
-- **Protocol**: `{ "task": "run_sql", "task_id": "<id>", "data": "<sql>" }` on registered port.
+#### Directory Agent
+- **Purpose**: Tracks agent resources and OS.
+- **Protocol**: `{ "action": "query", "requirements": {...} }` on localhost:5000.
 
-##### Local User Interface Agent (Local UI Agent)
-- **Purpose**: Local user conversation, runs on machine.
-- **Interface**: Desktop GUI (e.g., Tkinter/PyQt), Grok-like chat—scrollable, copyable, multi-conversation with cancellation.
-- **Protocol**:
-  - `{ "type": "user_request", "request": "<text>", "conversation_id": "<id>", "history": ["<msg1>"] }` to localhost:5005.
-  - `{ "type": "cancel", "conversation_id": "<id>" }`.
-  - `{ "type": "resume", "conversation_id": "<id>", "history": ["<msg1>"], "tasks": ["<task_id1>"] }`.
-  - Receives on localhost:5006.
-- **Grok API**: Concise calls per `prompts/agent_grok_prompt.txt`.
-- **Crash**: Saves conversations to file, reloads on restart.
-
-##### Remote User Interface Agent (Remote UI Agent)
-- **Purpose**: Internet-facing conversation, hosted on server.
-- **Interface**: Web-based GUI, Grok-like chat (e.g., Flask + HTML/CSS), multi-conversation with cancellation.
-- **Protocol**: Same as Local UI Agent, to Orchestrator (local/remote), receives on configurable port (e.g., 5006).
-- **Crash**: Saves conversations server-side, reloads on restart.
-
-##### Email Agent
-- **Purpose**: Sends/monitors emails.
-- **Protocol**:
-  - To Orchestrator: `{ "type": "email_update", "data": {...}}` or `{ "type": "status_update", "task_id": "<id>", "state": "<state>", "result": "<result>"}`.
-  - From Orchestrator: `{ "task": "send_email", "task_id": "<id>", "data": {"to": "<to>", "subject": "<subject>", "body": "<body>"}, "persist": <true/false> }`.
-  - Reconnect: `{ "type": "reconnect", "agent_id": "email-1", "queue": [...] }`.
-- **Port**: localhost:5007 (planned).
-- **Crash**: Queues updates, retries, reports on reconnect.
-
-#### 4. Directory Agent
-- **Purpose**: Tracks Agents.
-- **Protocol**: `{ "action": "query", "service": "<type>" }` on localhost:5000.
-
-#### 5. Orchestrator
-- **Purpose**: Manages components async, polls with timeouts, handles conversation-job links, crash recovery, tracks Grok API usage for billing.
-- **Input**: JSON on localhost:5005, including resume/reconnect.
-- **Output**: JSON tasks/responses, with persistence flags.
-- **State**: Tracks IDs/states per conversation in `conversations/<id>/state.json` with usage (prompt_tokens, completion_tokens, total_tokens, cost), reloads from dir tree.
-- **Timeouts**: 2s poll, 3 retries, 10s total.
-- **Crash**: Reloads state from `conversations/` tree, resumes polling based on agent reports.
-- **Grok API**: Uses `prompts/orch_grok_prompt.txt` via {"role": "system"}, queries via {"role": "user"}, sends history as {"old": [...], "latest": "<msg>"}, auth via `config/grok_api_config.json`. Grok returns {"target": "user"} or {"target": "orch"} with "usage".
-- **Billing**: Logs usage per convo in `state.json`, aggregates in `billing_summary.json`, estimates costs using $5/1M input and $10/1M output from `config/grok_api_config.json`, restricts via token_limit (warns at 90%, pauses at 100%).
+#### Orchestrator
+- **Purpose**: Manages user requests, delegates tasks based on resources, tracks Grok API usage.
+- **Input**: JSON on localhost:5005.
+- **Output**: JSON tasks/responses.
+- **State**: Tracks IDs/states in `conversations/<id>/state.json`, reloads from dir tree.
+- **Timeouts**: Per `config/orchestrator_config.json`.
+- **Grok API**: Uses `prompts/orch_grok_prompt.txt`, auth via `config/grok_api_config.json`.
+- **Billing**: Logs usage in `state.json`, aggregates in `billing_summary.json`, uses pricing from `config/grok_api_config.json`.
 
 ### System Architecture
-- **Communication**: JSON over TCP sockets (localhost:5000+; Orchestrator on 5005).
-- **AI Integration**: Grok API primary, concise via `prompts/orch_grok_prompt.txt` and `prompts/agent_grok_prompt.txt`, auth via `config/grok_api_config.json`.
-- **Config**: `config/grok_api_config.json` stores API key, endpoint, pricing, token limits.
+- **Communication**: JSON over TCP sockets (localhost:5000+).
+- **AI Integration**: Grok API, concise via prompts.
+- **Config**: `config/orchestrator_config.json` and `config/grok_api_config.json`.
 
 ### Feature Expansion Process
-1. **User Request**: UI Agent sends `{ "type": "user_request", "conversation_id": "<id>", ... }`.
-2. **Analysis**: Orchestrator queries Directory, assigns IDs, clarifies.
-3. **Execution/Creation**: Tasks async (persistent or not) or generates components.
-4. **Status**: Polls, updates state, reports per conversation.
+1. **User Request**: UI sends request.
+2. **Analysis**: Orchestrator assesses resources, queries Directory Agent.
+3. **Execution**: Tasks assigned to capable agents.
+4. **Status**: Polls, updates state.
 
 ### Next Steps
-- Refine Local UI Agent GUI with conversation persistence, job tracking/cancellation, crash reload.
-- Design Orchestrator crash recovery, conversation-job persistence, Orch-to-Grok interaction, billing features.
-- Plan Remote UI Agent (web-based) later.
-
-### Notes
-- Crash recovery: UI Agents persist conversations, Orchestrator reloads state, agents queue data/restart jobs.
-- UI Agents manage conversations, tie jobs to them, cancel via closure, persist specified outcomes.
-- Continuity maintained in `rehydrate_prompt.txt`.
+- Refine Local UI Agent GUI with persistence, job tracking/cancellation, crash reload.
+- Design Orchestrator crash recovery, billing features.
