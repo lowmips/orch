@@ -3,6 +3,8 @@ import json
 import os
 import aiohttp
 import logging
+import psutil
+import platform
 from datetime import datetime
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -40,9 +42,22 @@ class Orchestrator:
         self.task_counter = 0
         self.total_tokens = 0
         self.total_cost = 0
+        self.resources = self.get_resources()
         self.loop = asyncio.get_event_loop()
         os.makedirs(CONVERSATIONS_DIR, exist_ok=True)
         self.load_state()
+
+    def get_resources(self):
+        return {
+            "cpu_cores": psutil.cpu_count(),
+            "cpu_usage": psutil.cpu_percent(interval=1),
+            "memory_total": psutil.virtual_memory().total // (1024 * 1024),
+            "memory_used": psutil.virtual_memory().percent,
+            "disk_total": psutil.disk_usage('/').total // (1024 * 1024),
+            "disk_free": psutil.disk_usage('/').free // (1024 * 1024),
+            "disk_io": psutil.disk_io_counters().read_bytes // 1024 + psutil.disk_io_counters().write_bytes // 1024,
+            "os": platform.system()
+        }
 
     async def start(self):
         server = await asyncio.start_server(self.handle_client, 'localhost', ORCH_PORT)
@@ -149,7 +164,7 @@ class Orchestrator:
                     "type": "u",
                     "conversation_id": convo_id,
                     "history": {"old": history, "latest": latest},
-                    "resources": {"cpu": 4, "memory": 8192, "os": "linux"}  # Example local resources
+                    "resources": self.resources
                 }
             })
         }
