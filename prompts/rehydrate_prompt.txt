@@ -1,0 +1,47 @@
+# rehydrate_prompt.txt
+Date: March 08, 2025
+Author: [Your Name] with assistance from Grok 3 (xAI)
+
+# Reprompt for Grok 3 to Rebuild Automation System
+You are Grok 3, built by xAI. Your task is to rebuild an automation system project based on the details in this zip file, originally developed by [Your Name] with my assistance starting March 07, 2025. Use the provided project spec ("Automation System Design Document"), continuity prompt, directory structure, and file contents under `orch/` to recreate the system as it stands on March 08, 2025. The system uses Python with asyncio, communicates via JSON over TCP sockets, integrates with the Grok API (mocked for now), and persists state in separate conversation files. No additional comments or thoughts—implement exactly as specified.
+
+## Initial Prompt Context
+- I have tools to analyze X posts, search the web, and manage files when asked.
+- Current date: March 08, 2025.
+- Knowledge is continuously updated, no cutoff.
+
+## Project Files (Under `orch/`)
+- **Automation System Design Document**: `orch/docs/Automation_System_Design_Document.txt` – Full project spec.
+- **Continuity Prompt**: `orch/docs/continuity_prompt.txt` – Tracks project state and progress.
+- **Orchestrator Code**: `orch/agents/orchestrator.py` – Python implementation of the Orchestrator.
+- **Orchestrator System Prompt**: `orch/prompts/orchestrator_system_prompt.txt` – Defines Orchestrator behavior.
+- **Orch Grok Prompt**: `orch/prompts/orch_grok_prompt.txt` – Grok API prompt for Orchestrator.
+- **Grok API Config**: `orch/config/grok_api_config.json` – API auth, pricing, and limits.
+
+## Directory Structure (Under `orch/`)
+- **agents/**: Contains agent scripts.
+  - `orchestrator.py`
+- **prompts/**: Contains prompt files.
+  - `orchestrator_system_prompt.txt`
+  - `orch_grok_prompt.txt`
+  - `agent_grok_prompt.txt` (placeholder, assume empty if not present)
+- **config/**: Contains configuration files.
+  - `grok_api_config.json`
+- **docs/**: Contains design and continuity documents.
+  - `Automation_System_Design_Document.txt`
+  - `continuity_prompt.txt`
+- **conversations/**: Stores conversation states (created runtime).
+  - `<conversation_id>/state.json`
+- **billing_summary.json**: Aggregated billing data (created runtime, in `orch/` root).
+
+## Instructions for Reprompting
+1. Extract the zip file, placing `rehydrate_prompt.txt` in the root and all other files under `orch/`.
+2. Use the files in `orch/` to rebuild the system:
+   - Load `orch/docs/Automation_System_Design_Document.txt` as the project spec.
+   - Load `orch/docs/continuity_prompt.txt` for current state and next steps.
+   - Deploy `orch/agents/orchestrator.py` as the Orchestrator.
+   - Use `orch/prompts/orchestrator_system_prompt.txt` and `orch/prompts/orch_grok_prompt.txt` for prompts.
+   - Configure with `orch/config/grok_api_config.json`.
+3. Run `orch/agents/orchestrator.py` with Python (requires asyncio, aiohttp, logging).
+4. Test by sending JSON messages to localhost:5005 (e.g., via netcat or a UI Agent stub).
+5. Verify state persistence in `orch/conversations/<id>/state.json` and billing in `orch/billing_summary.json`.
