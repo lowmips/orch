@@ -1,0 +1,11 @@
+{
+  "api_key": "your-grok-api-key-here",
+  "endpoint": "https://api.x.ai/grok/v1",
+  "version": "v1",
+  "pricing": {
+    "input_tokens": 5.0,
+    "output_tokens": 10.0
+  },
+  "token_limit": 10000,
+  "warning_threshold": 0.9
+}
