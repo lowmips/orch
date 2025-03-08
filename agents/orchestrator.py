@@ -12,8 +12,8 @@ class Orchestrator:
     def __init__(self):
         self.host = "localhost"
         self.port = 5005
-        self.state_dir = "conversations"
-        self.billing_file = "billing_summary.json"
+        self.state_dir = "../conversations"
+        self.billing_file = "../billing_summary.json"
         self.conversations = {}
         self.agent_connections = {}
         self.token_limit = 10000
@@ -23,7 +23,7 @@ class Orchestrator:
         self.load_state()
 
     def load_config(self):
-        with open("config/grok_api_config.json", "r") as f:
+        with open("../config/grok_api_config.json", "r") as f:
             config = json.load(f)
             self.token_limit = config.get("token_limit", 10000)
             self.warning_threshold = config.get("warning_threshold", 0.9)
@@ -100,97 +100,11 @@ class Orchestrator:
             self.conversations[cid] = {"tasks": [], "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "cost": 0.0}}
 
         if message["type"] == "user_request":
-            with open("prompts/orch_grok_prompt.txt", "r") as f:
+            with open("../prompts/orch_grok_prompt.txt", "r") as f:
                 system_prompt = f.read()
             grok_response = await self.call_grok_api([
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": {"task": "process_request", "data": message}}
             ])
         elif message["type"] == "status_update":
-            task_id = message["task_id"]
-            self.update_task_state(cid, task_id, message["state"], message.get("result"))
-            grok_response = await self.call_grok_api([
-                {"role": "system", "content": open("prompts/orch_grok_prompt.txt", "r").read()},
-                {"role": "user", "content": {"task": "process_update", "data": message}}
-            ])
-
-        self.update_usage(cid, grok_response["usage"])
-        await self.handle_grok_response(cid, grok_response)
-
-    def update_task_state(self, cid, task_id, state, result=None):
-        for task in self.conversations[cid]["tasks"]:
-            if task["task_id"] == task_id:
-                task["state"] = state
-                if result:
-                    task["result"] = result
-                break
-        self.save_state(cid)
-
-    def update_usage(self, cid, usage):
-        state = self.conversations[cid]
-        for key in ["prompt_tokens", "completion_tokens", "total_tokens"]:
-            state["usage"][key] += usage[key]
-        state["usage"]["cost"] = (state["usage"]["prompt_tokens"] * self.pricing["input_tokens"] / 1e6) + \
-                                 (state["usage"]["completion_tokens"] * self.pricing["output_tokens"] / 1e6)
-        total_tokens = sum(state["usage"]["total_tokens"] for state in self.conversations.values())
-        if total_tokens >= self.token_limit:
-            logger.warning("Token limit exceeded. Pausing non-persistent tasks.")
-        elif total_tokens >= self.token_limit * self.warning_threshold:
-            logger.warning(f"Approaching token limit: {total_tokens}/{self.token_limit} tokens used.")
-        self.save_state(cid)
-
-    async def handle_grok_response(self, cid, response):
-        if response["target"] == "orch":
-            for action in response.get("actions", []):
-                if action["task"] == "update_ui":
-                    await self.send_to_ui(cid, action["data"]["response"])
-                elif action["task"] in ["search", "send_email"]:
-                    await self.send_to_agent(action)
-                    if action["task_id"] not in [t["task_id"] for t in self.conversations[cid]["tasks"]]:
-                        self.conversations[cid]["tasks"].append({"task_id": action["task_id"], "state": "running", "persist": action["persist"]})
-                        self.save_state(cid)
-        elif response["target"] == "user":
-            await self.send_to_ui(cid, response["response"])
-
-    async def send_to_ui(self, cid, response):
-        try:
-            reader, writer = await asyncio.open_connection("localhost", 5006)
-            writer.write(json.dumps({"type": "response", "response": response, "conversation_id": cid}).encode())
-            await writer.drain()
-            writer.close()
-            await writer.wait_closed()
-        except Exception as e:
-            logger.error(f"Failed to send to UI: {e}")
-
-    async def send_to_agent(self, action):
-        port = 5003 if action["task"] == "search" else 5007
-        agent_id = f"{action['task']}-{port}"
-        if agent_id not in self.agent_connections:
-            try:
-                reader, writer = await asyncio.open_connection("localhost", port)
-                self.agent_connections[agent_id] = writer
-            except Exception as e:
-                logger.error(f"Failed to connect to agent {agent_id}: {e}")
-                return
-        writer = self.agent_connections[agent_id]
-        writer.write(json.dumps(action).encode())
-        await writer.drain()
-
-    async def handle_client(self, reader, writer):
-        data = await reader.read(1024)
-        if data:
-            message = json.loads(data.decode())
-            logger.info(f"Received: {message}")
-            await self.process_message(message)
-        writer.close()
-        await writer.wait_closed()
-
-    async def run(self):
-        server = await asyncio.start_server(self.handle_client, self.host, self.port)
-        logger.info(f"Orchestrator running on {self.host}:{self.port}")
-        async with server:
-            await server.serve_forever()
-
-if __name__ == "__main__":
-    orch = Orchestrator()
-    asyncio.run(orch.run())
+            task_id = message
