@@ -3,22 +3,21 @@ Date: March 08, 2025
 Author: [Your Name] with assistance from Grok 3 (xAI)
 
 # Reprompt for Grok 3 to Rebuild Automation System
-You are Grok 3, built by xAI. Your task is to rebuild an automation system project based on the details in this zip file, originally developed by [Your Name] with my assistance starting March 07, 2025. Use the provided project spec ("Automation System Design Document"), continuity prompt, directory structure, and file contents under `orch/` to recreate the system as it stands on March 08, 2025. The system uses Python with asyncio, communicates via JSON over TCP sockets, integrates with the Grok API (mocked for now), and persists state in separate conversation files. No additional comments or thoughts—implement exactly as specified.
+You are Grok 3, built by xAI. Your task is to rebuild an automation system project based on the details provided, originally developed by [Your Name] with my assistance starting March 07, 2025. Use the project spec in `Automation_System_Design_Document.txt`, continuity prompt below, and listed files to recreate the system as it stands on March 08, 2025. The system uses Python with asyncio, communicates via JSON over TCP sockets, integrates with the Grok API (mocked for now), and persists state in separate conversation files. No additional comments or thoughts—implement exactly as specified.
 
 ## Initial Prompt Context
 - I have tools to analyze X posts, search the web, and manage files when asked.
 - Current date: March 08, 2025.
 - Knowledge is continuously updated, no cutoff.
 
-## Project Files (Under `orch/`)
-- **Automation System Design Document**: `orch/docs/Automation_System_Design_Document.txt` – Full project spec.
-- **Continuity Prompt**: `orch/docs/continuity_prompt.txt` – Tracks project state and progress.
-- **Orchestrator Code**: `orch/agents/orchestrator.py` – Python implementation of the Orchestrator.
-- **Orchestrator System Prompt**: `orch/prompts/orchestrator_system_prompt.txt` – Defines Orchestrator behavior.
-- **Orch Grok Prompt**: `orch/prompts/orch_grok_prompt.txt` – Grok API prompt for Orchestrator.
-- **Grok API Config**: `orch/config/grok_api_config.json` – API auth, pricing, and limits.
+## Project Files
+- **Project Spec**: `Automation_System_Design_Document.txt` – Full design document.
+- **Orchestrator Code**: `agents/orchestrator.py` – Python implementation.
+- **Orchestrator System Prompt**: `prompts/orchestrator_system_prompt.txt` – Defines Orchestrator behavior.
+- **Orch Grok Prompt**: `prompts/orch_grok_prompt.txt` – Grok API prompt for Orchestrator.
+- **Grok API Config**: `config/grok_api_config.json` – API auth, pricing, and limits.
 
-## Directory Structure (Under `orch/`)
+## Directory Structure
 - **agents/**: Contains agent scripts.
   - `orchestrator.py`
 - **prompts/**: Contains prompt files.
@@ -27,21 +26,60 @@ You are Grok 3, built by xAI. Your task is to rebuild an automation system proje
   - `agent_grok_prompt.txt` (placeholder, assume empty if not present)
 - **config/**: Contains configuration files.
   - `grok_api_config.json`
-- **docs/**: Contains design and continuity documents.
-  - `Automation_System_Design_Document.txt`
-  - `continuity_prompt.txt`
 - **conversations/**: Stores conversation states (created runtime).
   - `<conversation_id>/state.json`
-- **billing_summary.json**: Aggregated billing data (created runtime, in `orch/` root).
+- **Root**: Design doc, continuity, and billing.
+  - `Automation_System_Design_Document.txt`
+  - `rehydrate_prompt.txt` (this file, includes continuity below)
+  - `billing_summary.json` (created runtime)
+
+## Continuity Prompt
+# Continuity Prompt (Embedded)
+Date: March 08, 2025
+Author: [Your Name] with assistance from Grok 3 (xAI)
+
+You are assisting [Your Name] in designing an automation system with AI-driven components, leveraging xAI's Grok models. The system is detailed in `Automation_System_Design_Document.txt` and uses `prompts/orchestrator_system_prompt.txt`, `prompts/agent_grok_prompt.txt`, and `config/grok_api_config.json` (saved by [Your Name]). Maintain continuity from March 08, 2025. In this conversation, [Your Name] refers to "Orchestrator" as "Orch", but docs use "Orchestrator". No code until directed unless specified.
+
+**Current State**:
+- **Architecture**: Message-driven, JSON over TCP sockets (localhost:5000+).
+- **Orchestrator**: Hub on localhost:5005, async, polls agents (2s timeout, 3 retries, 10s total), tracks states, persists conversations in `conversations/<id>/state.json`, talks to Grok API, tracks usage for billing.
+- **Components**: Planned: Local UI Agent (5006, GUI), Remote UI Agent (5006, web), Email Agent (5007), Directory Agent (5000), Command Executor (5001), Screenshot Executor (5002), Web Scout (5003), MySQL Agent.
+- **Protocol**: JSON over TCP sockets.
+- **Agent-to-Grok**: Concise JSON, no banter, per `prompts/agent_grok_prompt.txt`.
+- **Orch-to-Grok**: Concise JSON, per `prompts/orch_grok_prompt.txt`, uses {"role": "system"} for prompt, {"role": "user"} for queries, history as {"old": [...], "latest": "<msg>"}, auth via `config/grok_api_config.json`. Grok returns {"target": "user"} or {"target": "orch"} with "usage".
+- **UI Agents**: Local (GUI) and Remote (web), Grok-like, support conversations with job tracking/cancellation, persistent outcomes, crash reload.
+- **Crash Recovery**: UI Agents save conversations, Orchestrator reloads from `conversations/` tree, agents queue data/restart jobs.
+- **Billing**: Tracks usage in `state.json` (tokens, cost), aggregates in `billing_summary.json`, estimates costs with $5/1M input, $10/1M output from `https://docs.x.ai/docs/models`, restricts via token_limit (warns at 90%, pauses at 100%).
+- **Directory Structure**: Agents in `agents/`, prompts in `prompts/`, config in `config/`, conversation states in `conversations/`, docs and billing in root.
+
+**Last Discussion**:
+- Abandoned zip approach, kept `Automation_System_Design_Document.txt` separate, coded Orchestrator in `agents/orchestrator.py`, prepared for reprompt testing with flat structure.
+- Updated billing with exact pricing: $5/1M input, $10/1M output.
+
+**Next Steps**:
+- Refine Local UI Agent GUI with conversation persistence, job tracking/cancellation, crash reload.
+- Design Orchestrator crash recovery, conversation-job persistence, Orch-to-Grok interaction, billing features.
+- Plan Remote UI Agent (web-based) later.
+
+**Instructions**:
+- Use `Automation_System_Design_Document.txt`, `prompts/orchestrator_system_prompt.txt`, `prompts/agent_grok_prompt.txt`, `config/grok_api_config.json`.
+- Update this continuity section with progress.
+- Align responses with design, focusing on crash-resilient GUI, Orch-to-Grok efficiency, and billing.
+- Use "Orch" in chat, "Orchestrator" in docs.
+
+**Current Task**:
+- Rebuild system from this prompt for reprompt testing.
+
+**Updated Continuity Prompt**: Embedded in `rehydrate_prompt.txt`, reflects flat structure, separate design doc, and Orchestrator coding.
 
 ## Instructions for Reprompting
-1. Extract the zip file, placing `rehydrate_prompt.txt` in the root and all other files under `orch/`.
-2. Use the files in `orch/` to rebuild the system:
-   - Load `orch/docs/Automation_System_Design_Document.txt` as the project spec.
-   - Load `orch/docs/continuity_prompt.txt` for current state and next steps.
-   - Deploy `orch/agents/orchestrator.py` as the Orchestrator.
-   - Use `orch/prompts/orchestrator_system_prompt.txt` and `orch/prompts/orch_grok_prompt.txt` for prompts.
-   - Configure with `orch/config/grok_api_config.json`.
-3. Run `orch/agents/orchestrator.py` with Python (requires asyncio, aiohttp, logging).
+1. Place all files in their specified directories: `agents/`, `prompts/`, `config/`, `conversations/`, and root.
+2. Use the files to rebuild the system:
+   - Load `Automation_System_Design_Document.txt` as the project spec.
+   - Use this `rehydrate_prompt.txt` for continuity and state.
+   - Deploy `agents/orchestrator.py` as the Orchestrator.
+   - Use `prompts/orchestrator_system_prompt.txt` and `prompts/orch_grok_prompt.txt` for prompts.
+   - Configure with `config/grok_api_config.json`.
+3. Run `agents/orchestrator.py` with Python (requires asyncio, aiohttp, logging).
 4. Test by sending JSON messages to localhost:5005 (e.g., via netcat or a UI Agent stub).
-5. Verify state persistence in `orch/conversations/<id>/state.json` and billing in `orch/billing_summary.json`.
+5. Verify state persistence in `conversations/<id>/state.json` and billing in `billing_summary.json`.
