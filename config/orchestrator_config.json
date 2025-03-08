@@ -1,0 +1,6 @@
+{
+  "port": 5005,
+  "poll_timeout": 2,
+  "max_retries": 3,
+  "total_timeout": 10
+}
