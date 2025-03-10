@@ -3,78 +3,64 @@ Date: March 08, 2025
 Author: [Your Name] with assistance from Grok 3 (xAI)
 
 ### Overview
-This system automates tasks using AI-driven agents, leveraging xAI's Grok models. Agents are general-purpose, capable of any task, differentiated by system resources (CPU, memory, disk) and OS type. The Orchestrator, a special agent, processes user requests via JSON over TCP sockets, delegates tasks it can’t handle, and tracks states with crash recovery. Agents use the Grok API concisely. The UI (Local GUI) supports conversations with job tracking, cancellation, and persistence.
+This system automates tasks using AI-driven peer agents, leveraging xAI's Grok models. All agents run identical code, communicate via JSON over TCP sockets, and interface with Grok and users via API. A separate UI program displays conversations. Agents vary by resources/OS, tracked in a MySQL directory.
 
 ### Terminology
-- **Agents**: General-purpose entities, vary by resources and OS.
-- **Orchestrator**: Special agent for user interaction and task delegation.
-- **Directory Agent**: Registry of agent resources and OS.
+- **Agents**: Identical entities, vary by port/resources, handle tasks and user/Grok requests.
+- **UI**: Separate program for user interaction, displays agent conversation tabs.
+- **Directory**: MySQL database tracking agent details.
 
 ### Component Design Principles
-- **Program-Based**: Independent agents.
-- **Asynchronous**: Orchestrator sends tasks, polls without waiting.
-- **State Awareness**: Tracks states with timeouts/retries, persists for crash recovery.
-- **Conversation Management**: UI supports conversations, ties jobs to them, allows cancellation, persists on crash.
-- **AI Efficiency**: Agents use Grok API concisely, no banter.
-- **AI Integration**: Grok API primary.
+- **Program-Based**: Independent peer agents.
+- **Asynchronous**: Agents process requests, poll per `config/orchestrator_config.json`.
+- **State Awareness**: Tracks states, persists conversations for crash recovery.
+- **Conversation Management**: Each Grok-agent interaction is a separate, logged conversation.
+- **AI Efficiency**: Agents use Grok concisely via `prompts/agent_grok_prompt.txt`.
+- **AI Integration**: Grok primary, acts as de facto user.
 
-### Communication with Orchestrator
-- **Interface**: Orchestrator on localhost:5005; Local UI Agent (GUI) on localhost:5006.
-- **Mechanism**: Async JSON over TCP sockets, polled per `config/orchestrator_config.json`.
-- **Context**: Sending agent includes system prompt + history.
-- **System Prompt**: In `prompts/orchestrator_system_prompt.txt`.
-- **Protocol**: JSON over TCP sockets:
-  - To Orchestrator (localhost:5005):
-    - UI: `{ "type": "user_request", "request": "<text>", "conversation_id": "<id>", "history": ["<msg1>"] }` → `{ "type": "response", "response": "<text>" }` to 5006.
-    - Cancel: `{ "type": "cancel", "conversation_id": "<id>" }`.
-    - Resume: `{ "type": "resume", "conversation_id": "<id>", "history": ["<msg1>"], "tasks": ["<task_id1>"] }`.
-    - Reconnect: `{ "type": "reconnect", "agent_id": "<id>", "queue": [{"type": "...", ...}] }`.
-  - Orchestrator to Directory Agent: `{ "action": "query", "requirements": {"cpu": <int>, "memory": <int>, "os": "<type>"} }` → `{ "agents": [{"id": "<id>", "port": <port>, "resources": {...}}] }`.
-  - Orchestrator to Agents: `{ "task": "<task>", "task_id": "<id>", "data": "<data>", "persist": <true/false> }` → `{ "type": "status_update", "task_id": "<id>", "state": "<state>", "result": "<output>" }`.
+### Agent Communication
+- **Interface**: Agents on localhost:<port> (e.g., 5001+); UI on localhost:5000.
+- **Mechanism**: Async JSON over TCP sockets.
+- **Protocol**: JSON, short keys:
+  - To Agent: `{ "t": "user_request", "r": "<text>", "c": "<id>" }` → `{ "t": "response", "r": "<text>" }`.
+  - List Conversations: `{ "t": "list_conversations" }` → `{ "t": "response", "r": ["<id1>", "<id2>"] }`.
+  - Get Conversation: `{ "t": "get_conversation", "c": "<id>" }` → `{ "t": "response", "r": {"history": ["<msg1>"]} }`.
+  - Task Status: `{ "t": "s", "i": "<id>", "s": "<state>", "r": "<result>" }`.
 
 ### Agent-to-Grok API Communication
-- **Mechanism**: Concise JSON, no banter, per `prompts/agent_grok_prompt.txt`.
+- **Mechanism**: Concise JSON via `prompts/agent_grok_prompt.txt`.
+- **API Calls** (to localhost:<port>):
+  - `{ "t": "query", "call": "list_capabilities" }` → `{ "t": "query_response", "r": ["email", "exec_program"] }`.
+  - `{ "t": "query", "call": "list_agents_for_task", "task": "<task>" }` → `{ "t": "query_response", "r": {"task": "<task>", "agents": ["agent-1"]} }`.
+  - `{ "t": "query", "call": "get_agent_resources", "agent_id": "<id>" }` → `{ "t": "query_response", "r": {"cpu_cores": 8, ...} }`.
+  - `{ "t": "query", "call": "get_agent_system_load", "agent_id": "<id>" }` → `{ "t": "query_response", "r": {"cpu_usage": 12.5, ...} }`.
 
 ### Crash Recovery
-- **Conversation Persistence**: UI saves conversations to file, reloads with "resume".
-- **Orchestrator Persistence**: Saves conversation-job mappings to `conversations/<id>/state.json`, reloads from dir tree.
-- **Agent Behavior**: Queues messages on Orchestrator crash, retries connecting, reports on reconnect.
+- **Conversation Persistence**: Agents save conversations to `conversations/<agent_id>/<conversation_id>/state.json`, reload on restart.
 
 ### Components
 #### Agents
-- **Purpose**: General-purpose task execution, vary by resources and OS.
-- **Protocol**: `{ "task": "<task>", "task_id": "<id>", "data": "<data>", "persist": <true/false> }` on registered port.
+- **Purpose**: General-purpose task execution, Grok/user interfacing.
+- **Protocol**: As above, on localhost:<port>.
 
-#### Local User Interface Agent (Local UI Agent)
-- **Purpose**: User conversation, runs locally.
-- **Interface**: Desktop GUI, Grok-like chat, multi-conversation with cancellation.
-- **Protocol**: As above, receives on localhost:5006.
-- **Crash**: Saves conversations, reloads on restart.
+#### User Interface (UI)
+- **Purpose**: Displays conversation tabs, sends requests to agents.
+- **Interface**: Runs `ui.py` on localhost:5000, API-based.
+- **Protocol**: Sends `{ "t": "user_request", ... }` to agent ports.
 
-#### Directory Agent
-- **Purpose**: Tracks agent resources and OS.
-- **Protocol**: `{ "action": "query", "requirements": {...} }` on localhost:5000.
-
-#### Orchestrator
-- **Purpose**: Manages user requests, delegates tasks based on resources, tracks Grok API usage.
-- **Input**: JSON on localhost:5005.
-- **Output**: JSON tasks/responses.
-- **State**: Tracks IDs/states in `conversations/<id>/state.json`, reloads from dir tree.
-- **Timeouts**: Per `config/orchestrator_config.json`.
-- **Grok API**: Uses `prompts/orch_grok_prompt.txt`, auth via `config/grok_api_config.json`.
-- **Billing**: Logs usage in `state.json`, aggregates in `billing_summary.json`, uses pricing from `config/grok_api_config.json`.
+#### Directory
+- **Purpose**: Tracks agents in MySQL (`agents` table: `id`, `port`, `capabilities`, `resources`).
 
 ### System Architecture
 - **Communication**: JSON over TCP sockets (localhost:5000+).
-- **AI Integration**: Grok API, concise via prompts.
-- **Config**: `config/orchestrator_config.json` and `config/grok_api_config.json`.
+- **AI Integration**: Grok via `prompts/agent_grok_prompt.txt`, auth via `config/grok_api_config.json`.
+- **Config**: `config/orchestrator_config.json` (reused), `config/grok_api_config.json`.
 
 ### Feature Expansion Process
-1. **User Request**: UI sends request.
-2. **Analysis**: Orchestrator assesses resources, queries Directory Agent.
-3. **Execution**: Tasks assigned to capable agents.
-4. **Status**: Polls, updates state.
+1. **User Request**: UI sends to an agent.
+2. **Analysis**: Agent queries Grok, which uses directory/API.
+3. **Execution**: Grok instructs agents independently.
 
 ### Next Steps
-- Refine Local UI Agent GUI with persistence, job tracking/cancellation, crash reload.
-- Design Orchestrator crash recovery, billing features.
+- Refine tool installation (e.g., Grok instructing agents to install software).
+- Enhance UI tab display or MySQL schema.
